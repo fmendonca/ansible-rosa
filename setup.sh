@@ -66,13 +66,10 @@ make create_machinepool
 echo "⏳ Aguardando 10 minutos antes de aplicar projetos..."
 sleep 600
 
-echo "📦 Aplicando projetos..."
-make create_projects
+echo "📦 Crie os projetos... make create_projects"
 
-echo "📦 Copiando as imagens e imagestream"
-make copy_images
+echo "⚙️ Migre as imagens entre os clusters ajuste o vars.yml e coloque os valores dos clusters e execute... make migrate_images"
 
-echo "📦 migrando aplicações"
-make migrate_resources 
+echo "⚙️ Migre as aplicações entre os clusters executando... make migrate_applications"
 
 echo "✅ Ambiente provisionado com sucesso!"
