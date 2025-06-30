@@ -7,7 +7,7 @@ log_error()  { echo "❌ [ERROR] $*"; }
 
 AWS_REGION="${AWS_REGION:?Defina AWS_REGION}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-PROJETOS_TXT="files/projects.txt"
+PROJETOS_TXT="projetos.txt"
 SA_NAME="image-uploader"
 KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
 SRC_AUTH="/tmp/podman-auth-src.json"
@@ -101,6 +101,9 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     continue
   fi
 
+  log_info "Conteúdo do authfile origem:"
+  cat "$SRC_AUTH" || true
+
   log_info "Gerando authfile para destino (ECR)..."
   if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"; then
     log_error "Falha no login de destino com podman. Pulando..."
@@ -129,7 +132,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       DST_IMAGE="$REG_DST/$projeto-$is_name:$tag"
 
       log_info "Pull $SRC_IMAGE"
-      if ! REGISTRY_AUTH_FILE="$SRC_AUTH" $PODMAN_BIN pull "$SRC_IMAGE"; then
+      if ! $PODMAN_BIN --authfile "$SRC_AUTH" pull "$SRC_IMAGE"; then
         log_error "Falha ao puxar $SRC_IMAGE"
         continue
       fi
@@ -141,7 +144,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       $PODMAN_BIN tag "$SRC_IMAGE" "$DST_IMAGE"
 
       log_info "Push $DST_IMAGE"
-      if ! REGISTRY_AUTH_FILE="$DST_AUTH" $PODMAN_BIN push "$DST_IMAGE"; then
+      if ! $PODMAN_BIN --authfile "$DST_AUTH" push "$DST_IMAGE"; then
         log_error "Falha ao enviar $DST_IMAGE"
       fi
 
