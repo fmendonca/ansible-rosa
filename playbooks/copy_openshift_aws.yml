@@ -112,7 +112,10 @@
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
           dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
           echo "Espelhando $image -> $dest_image"
-          oc image mirror "$image" "$dest_image" --insecure=true --dest-secret={{ ecr_secret_name }} || true
+          if ! oc image mirror "$image" "$dest_image" --insecure=true --dest-secret={{ ecr_secret_name }}; then
+            echo "[ERRO] Falha ao espelhar: $image"
+            exit 1
+          fi
         done
       args:
         executable: /bin/bash
