@@ -7,11 +7,13 @@ log_error()  { echo "❌ [ERROR] $*"; }
 
 AWS_REGION="${AWS_REGION:?Defina AWS_REGION}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-PROJETOS_TXT="files/projects.txt"
+PROJETOS_TXT="projetos.txt"
 SA_NAME="image-uploader"
 KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
+SRC_AUTH="/tmp/podman-auth-src.json"
+DST_AUTH="/tmp/podman-auth-dst.json"
 
-# Detecta se é root. Se não for, usa sudo para podman
+# Usa sudo se não for root
 if [[ $(id -u) -eq 0 ]]; then
   PODMAN_BIN="podman"
 else
@@ -66,7 +68,7 @@ log_info "Registry origem: $REG_SRC"
 log_info "Registry destino (ECR): $REG_DST"
 
 log_info "Efetuando login no Amazon ECR..."
-aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST"
+aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"
 
 IGNORAR_PROJETOS="openshift kube-system kube-public openshift-monitoring openshift-marketplace openshift-config openshift-config-managed openshift-infra openshift-image-registry"
 
@@ -90,7 +92,6 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" policy add-role-to-user system:image-puller -z "$SA_NAME" >/dev/null || true
 
   SRC_TOKEN=$(oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" create token "$SA_NAME" --duration=15m || true)
-  SRC_AUTH="/tmp/podman-auth-src.json"
 
   if [[ -z "$SRC_TOKEN" ]]; then
     log_error "Falha ao obter token da SA $SA_NAME. Pulando projeto $projeto..."
@@ -137,7 +138,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       $PODMAN_BIN tag "$SRC_IMAGE" "$DST_IMAGE"
 
       log_info "Push $DST_IMAGE"
-      if ! $PODMAN_BIN push "$DST_IMAGE"; then
+      if ! REGISTRY_AUTH_FILE="$DST_AUTH" $PODMAN_BIN push "$DST_IMAGE"; then
         log_error "Falha ao enviar $DST_IMAGE"
       fi
 
@@ -146,5 +147,5 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   done
 done < "$PROJETOS_TXT"
 
-rm -f /tmp/podman-auth-src.json "$KUBECONFIG_SRC"
+rm -f "$SRC_AUTH" "$DST_AUTH" "$KUBECONFIG_SRC"
 log_info "Migração concluída para o ECR!"
