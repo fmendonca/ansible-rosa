@@ -108,13 +108,11 @@
           fi
           digest=$(echo "$image" | awk -F@ '{print $2}')
           tag=$(echo "$digest" | cut -d: -f2)
-          if [ -z "$tag" ]; then
-            tag="latest"
-          fi
+          if [ -z "$tag" ]; then tag="latest"; fi
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
           dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
           echo "Espelhando $image -> $dest_image"
-          oc image mirror "$image" "$dest_image" --insecure=true || true
+          oc image mirror "$image" "$dest_image" --insecure=true --dest-secret={{ ecr_secret_name }} || true
         done
       args:
         executable: /bin/bash
