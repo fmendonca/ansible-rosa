@@ -67,9 +67,6 @@ REG_DST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 log_info "Registry origem: $REG_SRC"
 log_info "Registry destino (ECR): $REG_DST"
 
-log_info "Efetuando login no Amazon ECR..."
-aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"
-
 IGNORAR_PROJETOS="openshift kube-system kube-public openshift-monitoring openshift-marketplace openshift-config openshift-config-managed openshift-infra openshift-image-registry"
 
 while read -r projeto || [[ -n "$projeto" ]]; do
@@ -98,9 +95,15 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     continue
   fi
 
-  log_info "Login no OpenShift (origem) com podman..."
+  log_info "Gerando authfile para origem (OpenShift)..."
   if ! $PODMAN_BIN login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --authfile "$SRC_AUTH"; then
     log_error "Falha no login de origem com podman. Pulando..."
+    continue
+  fi
+
+  log_info "Gerando authfile para destino (ECR)..."
+  if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"; then
+    log_error "Falha no login de destino com podman. Pulando..."
     continue
   fi
 
