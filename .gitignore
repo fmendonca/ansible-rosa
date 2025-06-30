@@ -1,6 +1,7 @@
 
 # Ignorar arquivos de ambiente
 env
+.env
 
 # Ignorar diretórios e arquivos do Ansible
 *.retry

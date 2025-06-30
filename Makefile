@@ -47,7 +47,7 @@ create_machinepool: check-env check-vars
 	@$(ANSIBLE_CMD) $(PLAYBOOK_DIR)/create_machinepool.yml
 
 copy_images: check-env
-	bash shell/copy-image.sh
+	bash shell/copy-to-ecr.sh
 
 migrate_resources: check-env check-vars
 	@$(ANSIBLE_CMD) $(PLAYBOOK_DIR)/migrate_resources.yml
