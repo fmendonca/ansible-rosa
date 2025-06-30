@@ -41,7 +41,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -97,16 +97,14 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Obter authfile do OpenShift como JSON
+    - name: Gerar authfile do OpenShift
       shell: |
-        oc registry login --to=- 2>/dev/null
-      register: openshift_auth
+        oc registry login --to=/tmp/authfile-openshift.json
+      changed_when: false
 
     - name: Espelhar imagens usando podman
       shell: |
         registry="{{ image_registry_route.stdout }}"
-        echo '{{ openshift_auth.stdout }}' > /tmp/authfile-openshift.json
-        chmod 600 /tmp/authfile-openshift.json
 
         oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference' | while read original; do
           if echo "$original" | grep -q "image-registry.openshift-image-registry.svc"; then
