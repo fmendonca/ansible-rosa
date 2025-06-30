@@ -29,9 +29,27 @@
       register: image_registry_route
       changed_when: false
 
+    - name: Obter token do OpenShift
+      command: oc whoami -t
+      register: oc_token
+      changed_when: false
+
+    - name: Criar auth.json para acesso ao OpenShift registry
+      copy:
+        dest: /tmp/authfile-openshift.json
+        content: |
+          {
+            "auths": {
+              "{{ image_registry_route.stdout }}": {
+                "auth": "{{ 'user:' + oc_token.stdout | b64encode }}"
+              }
+            }
+          }
+        mode: '0600'
+
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -82,10 +100,10 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Exportar imagens do ImageStream para o ECR via rota pública
+    - name: Exportar imagens do ImageStream para o ECR via rota pública com auth
       shell: |
         registry="{{ image_registry_route.stdout }}"
-        oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference' | while read image; do
+        for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
           if echo "$image" | grep -q "image-registry.openshift-image-registry.svc"; then
             external_image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
           else
@@ -94,7 +112,12 @@
           img_name=$(basename "$image")
           new_image="{{ ecr_url }}/{{ item }}/$img_name"
           echo "Copiando $external_image para $new_image"
-          skopeo copy --src-tls-verify=false --dest-tls-verify=true docker://$external_image docker://$new_image
+          skopeo copy \
+            --src-authfile /tmp/authfile-openshift.json \
+            --src-tls-verify=false \
+            --dest-tls-verify=true \
+            docker://$external_image \
+            docker://$new_image
         done
       args:
         executable: /bin/bash
