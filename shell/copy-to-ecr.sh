@@ -10,15 +10,6 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 PROJETOS_TXT="files/projects.txt"
 SA_NAME="image-uploader"
 KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
-SRC_AUTH="/tmp/podman-auth-src.json"
-DST_AUTH="/tmp/podman-auth-dst.json"
-
-# Usa sudo se não for root
-if [[ $(id -u) -eq 0 ]]; then
-  PODMAN_BIN="podman"
-else
-  PODMAN_BIN="sudo podman"
-fi
 
 log_info "Gerando kubeconfig temporário com oc whoami..."
 TOKEN=$(oc whoami --show-token)
@@ -89,27 +80,10 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" policy add-role-to-user system:image-puller -z "$SA_NAME" >/dev/null || true
 
   SRC_TOKEN=$(oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" create token "$SA_NAME" --duration=15m || true)
-
   if [[ -z "$SRC_TOKEN" ]]; then
     log_error "Falha ao obter token da SA $SA_NAME. Pulando projeto $projeto..."
     continue
   fi
-
-  log_info "Gerando authfile para origem (OpenShift)..."
-  if ! $PODMAN_BIN login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --config "$SRC_AUTH"; then
-    log_error "Falha no login de origem com podman. Pulando..."
-    continue
-  fi
-
-  sudo chmod 777 "$SRC_AUTH"
-
-  log_info "Gerando authfile para destino (ECR)..."
-  if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --config "$DST_AUTH"; then
-    log_error "Falha no login de destino com podman. Pulando..."
-    continue
-  fi
-
-  sudo chmod 777 "$DST_AUTH"
 
   IS_JSON=$(oc --kubeconfig="$KUBECONFIG_SRC" get is -n "$projeto" -o json || true)
   if ! echo "$IS_JSON" | jq -e '.items | length > 0' >/dev/null; then
@@ -129,32 +103,25 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     for tag in $tags; do
       log_info "Migrando imagem $is_name:$tag do projeto $projeto"
 
-      SRC_IMAGE="$REG_SRC/$projeto/$is_name:$tag"
-      DST_IMAGE="$REG_DST/$projeto-$is_name:$tag"
-
-      log_info "Pull $SRC_IMAGE"
-      if ! $PODMAN_BIN --config "$SRC_AUTH" pull "$SRC_IMAGE"; then
-        log_error "Falha ao puxar $SRC_IMAGE"
-        continue
-      fi
+      SRC_IMAGE="docker://$REG_SRC/$projeto/$is_name:$tag"
+      DST_IMAGE="docker://$REG_DST/$projeto-$is_name:$tag"
+      ECR_PASSWORD=$(aws ecr get-login-password --region "$AWS_REGION")
 
       log_info "Criando repositório ECR (se não existir)..."
       aws ecr describe-repositories --repository-names "$projeto-$is_name" --region "$AWS_REGION" >/dev/null 2>&1 || \
       aws ecr create-repository --repository-name "$projeto-$is_name" --region "$AWS_REGION"
 
-      $PODMAN_BIN tag "$SRC_IMAGE" "$DST_IMAGE"
-
-      log_info "Push $DST_IMAGE"
-      if ! $PODMAN_BIN --config "$DST_AUTH" push "$DST_IMAGE"; then
-        log_error "Falha ao enviar $DST_IMAGE"
+      if ! skopeo copy \
+          --src-creds "$SA_NAME:$SRC_TOKEN" \
+          --dest-creds "AWS:$ECR_PASSWORD" \
+          "$SRC_IMAGE" "$DST_IMAGE"; then
+        log_error "Falha ao migrar $SRC_IMAGE para $DST_IMAGE"
+        continue
       fi
-
-      $PODMAN_BIN rmi "$SRC_IMAGE" "$DST_IMAGE" >/dev/null || true
     done
   done
 done < "$PROJETOS_TXT"
 
 log_info "Removendo arquivos temporários..."
-rm -f "$SRC_AUTH" "$DST_AUTH" "$KUBECONFIG_SRC"
-
-log_info "Migração concluída para o ECR!"
+rm -f "$KUBECONFIG_SRC"
+log_info "Migração concluída com sucesso para o ECR!"
