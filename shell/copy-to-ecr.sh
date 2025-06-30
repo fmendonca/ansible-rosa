@@ -39,6 +39,15 @@ users:
     token: $TOKEN
 EOF
 
+# === EXPOR ROTA DO REGISTRY SE NECESSÁRIO ===
+log_info "Verificando se a rota do registry está exposta..."
+if ! oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry &>/dev/null; then
+  log_info "Rota default-route não existe. Expondo o serviço..."
+  oc --kubeconfig="$KUBECONFIG_SRC" expose service image-registry -n openshift-image-registry
+else
+  log_info "Rota default-route já está exposta."
+fi
+
 REG_SRC=$(oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 REG_DST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
