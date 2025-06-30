@@ -24,32 +24,9 @@
       set_fact:
         s3_bucket: "openshift-backup-{{ aws_account_id.stdout }}-{{ aws_region.stdout }}"
 
-    - name: Obter rota pública do image registry
-      shell: oc get route default-route -n openshift-image-registry --template='{{ "{{" }} .spec.host {{ "}}" }}'
-      register: image_registry_route
-      changed_when: false
-
-    - name: Obter token do OpenShift
-      command: oc whoami -t
-      register: oc_token
-      changed_when: false
-
-    - name: Criar auth.json para acesso ao OpenShift registry
-      copy:
-        dest: /tmp/authfile-openshift.json
-        content: |
-          {
-            "auths": {
-              "{{ image_registry_route.stdout }}": {
-                "auth": "{{ (':' + oc_token.stdout) | b64encode }}"
-              }
-            }
-          }
-        mode: '0600'
-
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -105,22 +82,13 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Exportar imagens do ImageStream para o ECR via podman
+    - name: Espelhar imagens com oc image mirror para o ECR
       shell: |
-        registry="{{ image_registry_route.stdout }}"
         for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
-          if echo "$image" | grep -q "image-registry.openshift-image-registry.svc"; then
-            external_image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
-          else
-            external_image="$image"
-          fi
           img_name=$(basename "$image")
-          new_image="{{ ecr_url }}/{{ item }}/$img_name"
-          echo "Copiando $external_image para $new_image"
-
-          podman pull --tls-verify=false --authfile /tmp/authfile-openshift.json docker://$external_image || exit 1
-          podman tag $external_image $new_image
-          podman push --tls-verify=true $new_image || exit 1
+          dest_image="{{ ecr_url }}/{{ item }}/$img_name"
+          echo "Espelhando $image -> $dest_image"
+          oc image mirror "$image" "$dest_image"
         done
       args:
         executable: /bin/bash
