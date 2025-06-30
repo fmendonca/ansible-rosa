@@ -86,8 +86,9 @@
       shell: |
         for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
           digest=$(echo "$image" | awk -F@ '{print $2}')
+          tag=$(echo "$digest" | cut -d: -f2)
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
-          dest_image="{{ ecr_url }}/{{ item }}/$img_name:$digest"
+          dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
           echo "Espelhando $image -> $dest_image"
           oc image mirror "$image" "$dest_image"
         done
