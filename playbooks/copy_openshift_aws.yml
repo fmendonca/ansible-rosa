@@ -97,10 +97,20 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Gerar authfile do OpenShift
+    - name: Gerar authfile do OpenShift (usando token atual)
       shell: |
-        oc registry login --to=/tmp/authfile-openshift.json
-      changed_when: false
+        oc whoami -t > /tmp/oc-token.txt
+        cat > /tmp/authfile-openshift.json <<EOF
+            {
+              "auths": {
+                "{{ image_registry_route.stdout }}": {
+                  "auth": "$(echo -n $(oc whoami):$(cat /tmp/oc-token.txt) | base64)"
+                }
+              }
+            }
+            EOF
+      executable: /bin/bash
+
 
     - name: Espelhar imagens usando podman
       shell: |
