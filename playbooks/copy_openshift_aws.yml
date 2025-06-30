@@ -41,7 +41,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -97,23 +97,41 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Espelhar imagens com oc image mirror usando default-route
+    - name: Obter authfile do OpenShift como JSON
+      shell: |
+        oc registry login --to=- 2>/dev/null
+      register: openshift_auth
+
+    - name: Espelhar imagens usando podman
       shell: |
         registry="{{ image_registry_route.stdout }}"
+        echo '{{ openshift_auth.stdout }}' > /tmp/authfile-openshift.json
+        chmod 600 /tmp/authfile-openshift.json
+
         oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference' | while read original; do
           if echo "$original" | grep -q "image-registry.openshift-image-registry.svc"; then
             image=$(echo "$original" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
           else
             image="$original"
           fi
+
           digest=$(echo "$image" | awk -F@ '{print $2}')
           tag=$(echo "$digest" | cut -d: -f2)
           if [ -z "$tag" ]; then tag="latest"; fi
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
           dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
-          echo "Espelhando $image -> $dest_image"
-          if ! oc image mirror "$image" "$dest_image" --insecure=true --dest-secret={{ ecr_secret_name }}; then
-            echo "[ERRO] Falha ao espelhar: $image"
+
+          echo "🔄 Espelhando $image → $dest_image"
+
+          if ! podman pull --tls-verify=false --authfile /tmp/authfile-openshift.json docker://$image; then
+            echo "[ERRO] Falha ao puxar $image"
+            exit 1
+          fi
+
+          podman tag $image $dest_image
+
+          if ! podman push --tls-verify=true $dest_image; then
+            echo "[ERRO] Falha ao empurrar $dest_image"
             exit 1
           fi
         done
