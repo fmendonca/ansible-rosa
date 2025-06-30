@@ -28,7 +28,8 @@
 
     - name: Extrair lista de projetos
       set_fact:
-        projects: "{{ projects_file['content'] | b64decode | splitlines() }}"
+        projects: "{{ projects_file['content'] | b64decode | split('\n') | select('match', '.+') | list }}"
+      when: projects_file is defined and projects_file['content'] is defined
 
     - name: Criar diretório temporário
       file:
