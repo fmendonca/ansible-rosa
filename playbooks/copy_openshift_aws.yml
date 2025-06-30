@@ -6,6 +6,27 @@
     tmp_dir: "/tmp/openshift-export"
 
   tasks:
+
+    - name: Garantir que usuário tenha range de subuids/subgids para Podman
+      become: true
+      block:
+        - name: Adicionar subuids e subgids ao usuário atual
+          lineinfile:
+            path: "{{ item.path }}"
+            line: "{{ lookup('pipe', 'whoami') }}:100000:65536"
+            create: yes
+            state: present
+          loop:
+            - { path: /etc/subuid }
+            - { path: /etc/subgid }
+
+    - name: Executar podman system migrate
+      become: false
+      command: podman system migrate
+      register: migrate_result
+      changed_when: "'Migrated' in migrate_result.stdout or 'Updated' in migrate_result.stdout"
+      ignore_errors: true
+
     - name: Obter ID da conta AWS
       command: aws sts get-caller-identity --query Account --output text
       register: aws_account_id
@@ -41,7 +62,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
