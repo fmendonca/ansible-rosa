@@ -1,0 +1,54 @@
+- name: Restaurar projetos OpenShift a partir de backup no S3
+  hosts: localhost
+  gather_facts: false
+  vars:
+    s3_bucket: "openshift-backup"
+    tmp_dir: "/tmp/openshift-restore"
+
+  tasks:
+    - name: Ler projetos do arquivo
+      slurp:
+        src: files/projects.txt
+      register: projects_file
+
+    - name: Extrair lista de projetos
+      set_fact:
+        projects: "{{ projects_file['content'] | b64decode | splitlines() }}"
+
+    - name: Criar diretório temporário
+      file:
+        path: "{{ tmp_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Restaurar cada projeto
+      block:
+        - name: Criar subdiretório do projeto
+          file:
+            path: "{{ tmp_dir }}/{{ project }}"
+            state: directory
+
+        - name: Baixar arquivos do projeto do S3
+          shell: |
+            aws s3 cp s3://{{ s3_bucket }}/{{ project }} {{ tmp_dir }}/{{ project }} --recursive
+          args:
+            executable: /bin/bash
+
+        - name: Criar namespace se não existir
+          shell: |
+            oc get namespace {{ project }} || oc create namespace {{ project }}
+          changed_when: false
+
+        - name: Aplicar manifests (configmap, secret, sa, svc, route, deployment)
+          shell: |
+            for kind in configmap secret serviceaccount service route deployment; do
+              if [ -f "{{ tmp_dir }}/{{ project }}/$kind.yaml" ]; then
+                oc apply -n {{ project }} -f "{{ tmp_dir }}/{{ project }}/$kind.yaml"
+              fi
+            done
+          args:
+            executable: /bin/bash
+
+      loop: "{{ projects }}"
+      loop_control:
+        loop_var: project
