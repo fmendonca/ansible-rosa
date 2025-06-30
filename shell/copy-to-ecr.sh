@@ -96,7 +96,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   fi
 
   log_info "Gerando authfile para origem (OpenShift)..."
-  if ! $PODMAN_BIN login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --authfile "$SRC_AUTH"; then
+  if ! $PODMAN_BIN login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --config "$SRC_AUTH"; then
     log_error "Falha no login de origem com podman. Pulando..."
     continue
   fi
@@ -104,7 +104,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   sudo chmod 777 "$SRC_AUTH"
 
   log_info "Gerando authfile para destino (ECR)..."
-  if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"; then
+  if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --config "$DST_AUTH"; then
     log_error "Falha no login de destino com podman. Pulando..."
     continue
   fi
@@ -133,7 +133,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       DST_IMAGE="$REG_DST/$projeto-$is_name:$tag"
 
       log_info "Pull $SRC_IMAGE"
-      if ! $PODMAN_BIN --authfile "$SRC_AUTH" pull "$SRC_IMAGE"; then
+      if ! $PODMAN_BIN --config "$SRC_AUTH" pull "$SRC_IMAGE"; then
         log_error "Falha ao puxar $SRC_IMAGE"
         continue
       fi
@@ -145,7 +145,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       $PODMAN_BIN tag "$SRC_IMAGE" "$DST_IMAGE"
 
       log_info "Push $DST_IMAGE"
-      if ! $PODMAN_BIN --authfile "$DST_AUTH" push "$DST_IMAGE"; then
+      if ! $PODMAN_BIN --config "$DST_AUTH" push "$DST_IMAGE"; then
         log_error "Falha ao enviar $DST_IMAGE"
       fi
 
