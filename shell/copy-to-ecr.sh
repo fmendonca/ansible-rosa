@@ -101,7 +101,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     continue
   fi
 
-  chmod 777 "$SRC_AUTH"
+  sudo chmod 777 "$SRC_AUTH"
 
   log_info "Gerando authfile para destino (ECR)..."
   if ! aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST" --authfile "$DST_AUTH"; then
@@ -109,7 +109,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     continue
   fi
 
-  chmod 777 "$DST_AUTH"
+  sudo chmod 777 "$DST_AUTH"
 
   IS_JSON=$(oc --kubeconfig="$KUBECONFIG_SRC" get is -n "$projeto" -o json || true)
   if ! echo "$IS_JSON" | jq -e '.items | length > 0' >/dev/null; then
