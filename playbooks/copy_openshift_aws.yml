@@ -85,8 +85,9 @@
     - name: Espelhar imagens com oc image mirror para o ECR
       shell: |
         for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
-          img_name=$(basename "$image")
-          dest_image="{{ ecr_url }}/{{ item }}/$img_name"
+          digest=$(echo "$image" | awk -F@ '{print $2}')
+          img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
+          dest_image="{{ ecr_url }}/{{ item }}/$img_name:$digest"
           echo "Espelhando $image -> $dest_image"
           oc image mirror "$image" "$dest_image"
         done
