@@ -34,7 +34,6 @@
       file:
         path: "{{ tmp_dir }}"
         state: directory
-        mode: '0755'
 
     - name: Verificar se bucket S3 existe
       shell: aws s3api head-bucket --bucket {{ s3_bucket }}
@@ -61,52 +60,52 @@
           --dry-run=client -o yaml | oc apply -f -
       changed_when: true
 
-    - name: Processar projetos
-      vars:
-        project: "{{ item }}"
+    - name: Associar secret à SA default de cada projeto
+      shell: |
+        oc patch serviceaccount default -n {{ item }} \
+          -p '{"imagePullSecrets":[{"name":"{{ ecr_secret_name }}"}]}'
       loop: "{{ projects }}"
-      block:
+      changed_when: false
+      ignore_errors: true
 
-        - name: Associar o secret à SA default do projeto {{ project }}
-          shell: |
-            oc patch serviceaccount default -n {{ project }} \
-              -p '{"imagePullSecrets":[{"name":"{{ ecr_secret_name }}"}]}'
-          changed_when: false
-          ignore_errors: true
+    - name: Criar diretório por projeto
+      file:
+        path: "{{ tmp_dir }}/{{ item }}"
+        state: directory
+      loop: "{{ projects }}"
 
-        - name: Criar diretório do projeto
-          file:
-            path: "{{ tmp_dir }}/{{ project }}"
-            state: directory
+    - name: Exportar imagens do ImageStream para o ECR
+      shell: |
+        for image in $(oc get is -n {{ item }} -o jsonpath='{.items[*].status.tags[*].items[*].dockerImageReference}'); do
+          img_name=$(basename "$image")
+          new_image="{{ ecr_url }}/{{ item }}/$img_name"
+          echo "Copiando $image para $new_image"
+          skopeo copy --src-tls-verify=false --dest-tls-verify=true docker://$image docker://$new_image
+        done
+      args:
+        executable: /bin/bash
+      loop: "{{ projects }}"
 
-        - name: Exportar imagens do ImageStream para o ECR
-          shell: |
-            for image in $(oc get is -n {{ project }} -o jsonpath='{.items[*].status.tags[*].items[*].dockerImageReference}'); do
-              img_name=$(basename "$image")
-              new_image="{{ ecr_url }}/{{ project }}/$img_name"
-              echo "Copiando $image para $new_image"
-              skopeo copy --src-tls-verify=false --dest-tls-verify=true docker://$image docker://$new_image
-            done
-          args:
-            executable: /bin/bash
+    - name: Exportar objetos do OpenShift
+      shell: |
+        for kind in deployment configmap secret serviceaccount service route; do
+          oc get $kind -n {{ item }} -o yaml > {{ tmp_dir }}/{{ item }}/$kind.yaml || true
+        done
+      args:
+        executable: /bin/bash
+      loop: "{{ projects }}"
 
-        - name: Exportar objetos OpenShift
-          shell: |
-            for kind in deployment configmap secret serviceaccount service route; do
-              oc get $kind -n {{ project }} -o yaml > {{ tmp_dir }}/{{ project }}/$kind.yaml || true
-            done
-          args:
-            executable: /bin/bash
+    - name: Atualizar imagem dos deployments com ECR
+      replace:
+        path: "{{ tmp_dir }}/{{ item }}/deployment.yaml"
+        regexp: 'image: .*/(.*)'
+        replace: 'image: {{ ecr_url }}/{{ item }}/\1'
+      when: lookup('file', tmp_dir + '/' + item + '/deployment.yaml', errors='ignore') != ''
+      loop: "{{ projects }}"
 
-        - name: Atualizar imagem dos deployments com ECR
-          replace:
-            path: "{{ tmp_dir }}/{{ project }}/deployment.yaml"
-            regexp: 'image: .*/(.*)'
-            replace: 'image: {{ ecr_url }}/{{ project }}/\1'
-          when: lookup('file', tmp_dir + '/' + project + '/deployment.yaml', errors='ignore') != ''
-
-        - name: Enviar arquivos para o S3
-          shell: |
-            aws s3 cp {{ tmp_dir }}/{{ project }} s3://{{ s3_bucket }}/{{ project }} --recursive
-          args:
-            executable: /bin/bash
+    - name: Enviar arquivos para o S3
+      shell: |
+        aws s3 cp {{ tmp_dir }}/{{ item }} s3://{{ s3_bucket }}/{{ item }} --recursive
+      args:
+        executable: /bin/bash
+      loop: "{{ projects }}"
