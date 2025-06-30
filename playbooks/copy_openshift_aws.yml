@@ -2,7 +2,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    s3_bucket: "openshift-backup"
+    s3_bucket: "openshift-backup-{{ aws_account_id.stdout }}-{{ aws_region.stdout }}"
     ecr_secret_name: "ecr-secret"
     tmp_dir: "/tmp/openshift-export"
 
