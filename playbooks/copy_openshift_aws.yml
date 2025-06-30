@@ -24,6 +24,21 @@
       set_fact:
         s3_bucket: "openshift-backup-{{ aws_account_id.stdout }}-{{ aws_region.stdout }}"
 
+    - name: Habilitar default-route no registry se necessário
+      shell: |
+        oc patch configs.imageregistry/cluster --type=merge -p '{"spec":{"defaultRoute":true}}'
+      changed_when: false
+      failed_when: false
+
+    - name: Esperar e obter rota pública do image registry
+      shell: |
+        oc get route default-route -n openshift-image-registry --template='{{ "{{" }} .spec.host {{ "}}" }}'
+      register: image_registry_route
+      retries: 5
+      delay: 5
+      until: image_registry_route.stdout != ""
+      changed_when: false
+
     - name: Ler projetos do arquivo
       slurp:
         src: ../files/projects.txt
@@ -85,16 +100,21 @@
     - name: Espelhar imagens com oc image mirror usando default-route
       shell: |
         registry="{{ image_registry_route.stdout }}"
-        for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
-          if echo "$image" | grep -q "image-registry.openshift-image-registry.svc"; then
-            image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
+        oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference' | while read original; do
+          if echo "$original" | grep -q "image-registry.openshift-image-registry.svc"; then
+            image=$(echo "$original" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
+          else
+            image="$original"
           fi
           digest=$(echo "$image" | awk -F@ '{print $2}')
           tag=$(echo "$digest" | cut -d: -f2)
+          if [ -z "$tag" ]; then
+            tag="latest"
+          fi
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
           dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
           echo "Espelhando $image -> $dest_image"
-          oc image mirror "$image" "$dest_image" --insecure=true
+          oc image mirror "$image" "$dest_image" --insecure=true || true
         done
       args:
         executable: /bin/bash
