@@ -85,8 +85,12 @@
     - name: Exportar imagens do ImageStream para o ECR via rota pública
       shell: |
         registry="{{ image_registry_route.stdout }}"
-        for image in $(oc get is -n {{ item }} -o jsonpath='{.items[*].status.tags[*].items[*].dockerImageReference}'); do
-          external_image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
+        oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference' | while read image; do
+          if echo "$image" | grep -q "image-registry.openshift-image-registry.svc"; then
+            external_image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
+          else
+            external_image="$image"
+          fi
           img_name=$(basename "$image")
           new_image="{{ ecr_url }}/{{ item }}/$img_name"
           echo "Copiando $external_image para $new_image"
@@ -95,6 +99,7 @@
       args:
         executable: /bin/bash
       loop: "{{ projects }}"
+
 
     - name: Exportar objetos do OpenShift
       shell: |
