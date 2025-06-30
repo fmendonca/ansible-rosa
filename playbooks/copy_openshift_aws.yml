@@ -41,7 +41,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -97,20 +97,19 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Gerar authfile do OpenShift (usando token atual)
+    - name: Gerar authfile do OpenShift (via token manual)
       shell: |
-        oc whoami -t > /tmp/oc-token.txt
+        export TOKEN=$(oc whoami -t)
         cat > /tmp/authfile-openshift.json <<EOF
-            {
-              "auths": {
-                "{{ image_registry_route.stdout }}": {
-                  "auth": "$(echo -n $(oc whoami):$(cat /tmp/oc-token.txt) | base64)"
-                }
-              }
+        {
+          "auths": {
+            "{{ image_registry_route.stdout }}": {
+              "auth": "$(echo -n "unused:\$TOKEN" | base64)"
             }
-            EOF
+          }
+        }
+        EOF
       executable: /bin/bash
-
 
     - name: Espelhar imagens usando podman
       shell: |
