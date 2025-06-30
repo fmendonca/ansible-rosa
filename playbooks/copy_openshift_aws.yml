@@ -23,7 +23,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: files/projects.txt
+        src: ../files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
