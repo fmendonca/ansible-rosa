@@ -1,19 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-# === LOG FUNCTIONS ===
 log_info()   { echo "ℹ️  [INFO] $*"; }
 log_warn()   { echo "⚠️  [WARN] $*"; }
 log_error()  { echo "❌ [ERROR] $*"; }
 
-# === CONFIG ===
 AWS_REGION="${AWS_REGION:?Defina AWS_REGION}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-PROJETOS_TXT="files/projects.txt"
+PROJETOS_TXT="projetos.txt"
 SA_NAME="image-uploader"
 KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
 
-# === GERA KUBECONFIG TEMPORÁRIO ===
+# Detecta se é root. Se não for, usa sudo para podman
+if [[ $(id -u) -eq 0 ]]; then
+  PODMAN_BIN="podman"
+else
+  PODMAN_BIN="sudo podman"
+fi
+
 log_info "Gerando kubeconfig temporário com oc whoami..."
 TOKEN=$(oc whoami --show-token)
 SERVER=$(oc whoami --show-server)
@@ -39,7 +43,6 @@ users:
     token: $TOKEN
 EOF
 
-# === HABILITA ROTA DO REGISTRY ===
 log_info "Garantindo que a rota default-route está habilitada..."
 oc --kubeconfig="$KUBECONFIG_SRC" patch configs.imageregistry cluster --type merge -p '{"spec":{"defaultRoute":true}}'
 
@@ -59,14 +62,12 @@ fi
 REG_SRC=$(oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 REG_DST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-# === LOGIN NO ECR ===
 log_info "Registry origem: $REG_SRC"
 log_info "Registry destino (ECR): $REG_DST"
 
 log_info "Efetuando login no Amazon ECR..."
-aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REG_DST"
+aws ecr get-login-password --region "$AWS_REGION" | $PODMAN_BIN login --username AWS --password-stdin "$REG_DST"
 
-# === LOOP PROJETOS ===
 IGNORAR_PROJETOS="openshift kube-system kube-public openshift-monitoring openshift-marketplace openshift-config openshift-config-managed openshift-infra openshift-image-registry"
 
 while read -r projeto || [[ -n "$projeto" ]]; do
@@ -97,7 +98,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   fi
 
   log_info "Login no OpenShift (origem) com podman..."
-  if ! podman login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --authfile "$SRC_AUTH"; then
+  if ! $PODMAN_BIN login "$REG_SRC" -u "$SA_NAME" -p "$SRC_TOKEN" --authfile "$SRC_AUTH"; then
     log_error "Falha no login de origem com podman. Pulando..."
     continue
   fi
@@ -124,7 +125,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       DST_IMAGE="$REG_DST/$projeto-$is_name:$tag"
 
       log_info "Pull $SRC_IMAGE"
-      if ! REGISTRY_AUTH_FILE="$SRC_AUTH" podman pull "$SRC_IMAGE"; then
+      if ! REGISTRY_AUTH_FILE="$SRC_AUTH" $PODMAN_BIN pull "$SRC_IMAGE"; then
         log_error "Falha ao puxar $SRC_IMAGE"
         continue
       fi
@@ -133,14 +134,14 @@ while read -r projeto || [[ -n "$projeto" ]]; do
       aws ecr describe-repositories --repository-names "$projeto-$is_name" --region "$AWS_REGION" >/dev/null 2>&1 || \
       aws ecr create-repository --repository-name "$projeto-$is_name" --region "$AWS_REGION"
 
-      podman tag "$SRC_IMAGE" "$DST_IMAGE"
+      $PODMAN_BIN tag "$SRC_IMAGE" "$DST_IMAGE"
 
       log_info "Push $DST_IMAGE"
-      if ! podman push "$DST_IMAGE"; then
+      if ! $PODMAN_BIN push "$DST_IMAGE"; then
         log_error "Falha ao enviar $DST_IMAGE"
       fi
 
-      podman rmi "$SRC_IMAGE" "$DST_IMAGE" >/dev/null || true
+      $PODMAN_BIN rmi "$SRC_IMAGE" "$DST_IMAGE" >/dev/null || true
     done
   done
 done < "$PROJETOS_TXT"
