@@ -39,26 +39,35 @@ users:
     token: $TOKEN
 EOF
 
-# === EXPOR ROTA DO REGISTRY SE NECESSÁRIO ===
-log_info "Verificando se a rota do registry está exposta..."
+# === HABILITA ROTA DO REGISTRY ===
+log_info "Garantindo que a rota default-route está habilitada..."
+oc --kubeconfig="$KUBECONFIG_SRC" patch configs.imageregistry cluster --type merge -p '{"spec":{"defaultRoute":true}}'
+
+log_info "Aguardando a criação da rota default-route..."
+for i in {1..10}; do
+  if oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry &>/dev/null; then
+    break
+  fi
+  sleep 2
+done
+
 if ! oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry &>/dev/null; then
-  log_info "Rota default-route não existe. Expondo o serviço..."
-  oc --kubeconfig="$KUBECONFIG_SRC" expose service image-registry -n openshift-image-registry
-else
-  log_info "Rota default-route já está exposta."
+  log_error "Rota default-route não encontrada após o patch. Abortando."
+  exit 1
 fi
 
 REG_SRC=$(oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 REG_DST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-# Projetos sistêmicos a ignorar
-IGNORAR_PROJETOS="openshift kube-system kube-public openshift-monitoring openshift-marketplace openshift-config openshift-config-managed openshift-infra openshift-image-registry"
-
+# === LOGIN NO ECR ===
 log_info "Registry origem: $REG_SRC"
 log_info "Registry destino (ECR): $REG_DST"
 
 log_info "Efetuando login no Amazon ECR..."
 aws ecr get-login-password --region "$AWS_REGION" | podman login --username AWS --password-stdin "$REG_DST"
+
+# === LOOP PROJETOS ===
+IGNORAR_PROJETOS="openshift kube-system kube-public openshift-monitoring openshift-marketplace openshift-config openshift-config-managed openshift-infra openshift-image-registry"
 
 while read -r projeto || [[ -n "$projeto" ]]; do
   if echo "$IGNORAR_PROJETOS" | grep -qw "$projeto"; then
@@ -68,7 +77,6 @@ while read -r projeto || [[ -n "$projeto" ]]; do
 
   log_info "Projeto: $projeto"
 
-  log_info "Garantindo SA $SA_NAME no projeto..."
   if ! oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" get sa "$SA_NAME" &>/dev/null; then
     oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" create sa "$SA_NAME"
   fi
