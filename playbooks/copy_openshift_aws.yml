@@ -41,7 +41,7 @@
           {
             "auths": {
               "{{ image_registry_route.stdout }}": {
-                "auth": "{{ (oc_token.stdout + ':') | b64encode }}"
+                "auth": "{{ (':' + oc_token.stdout) | b64encode }}"
               }
             }
           }
