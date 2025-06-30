@@ -82,15 +82,19 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Espelhar imagens com oc image mirror para o ECR
+    - name: Espelhar imagens com oc image mirror usando default-route
       shell: |
+        registry="{{ image_registry_route.stdout }}"
         for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
+          if echo "$image" | grep -q "image-registry.openshift-image-registry.svc"; then
+            image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
+          fi
           digest=$(echo "$image" | awk -F@ '{print $2}')
           tag=$(echo "$digest" | cut -d: -f2)
           img_name=$(basename $(echo "$image" | awk -F@ '{print $1}'))
           dest_image="{{ ecr_url }}/{{ item }}/$img_name:$tag"
           echo "Espelhando $image -> $dest_image"
-          oc image mirror "$image" "$dest_image"
+          oc image mirror "$image" "$dest_image" --insecure=true
         done
       args:
         executable: /bin/bash
