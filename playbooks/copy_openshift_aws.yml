@@ -2,7 +2,6 @@
   hosts: localhost
   gather_facts: false
   vars:
-    s3_bucket: "openshift-backup-{{ aws_account_id.stdout }}-{{ aws_region.stdout }}"
     ecr_secret_name: "ecr-secret"
     tmp_dir: "/tmp/openshift-export"
 
@@ -21,15 +20,23 @@
       set_fact:
         ecr_url: "{{ aws_account_id.stdout }}.dkr.ecr.{{ aws_region.stdout }}.amazonaws.com"
 
+    - name: Definir nome único do bucket S3
+      set_fact:
+        s3_bucket: "openshift-backup-{{ aws_account_id.stdout }}-{{ aws_region.stdout }}"
+
+    - name: Obter rota pública do image registry
+      shell: oc get route default-route -n openshift-image-registry --template='{{ "{{" }} .spec.host {{ "}}" }}'
+      register: image_registry_route
+      changed_when: false
+
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
       set_fact:
         projects: "{{ projects_file['content'] | b64decode | split('\n') | select('match', '.+') | list }}"
-      when: projects_file is defined and projects_file['content'] is defined
 
     - name: Criar diretório temporário
       file:
@@ -75,13 +82,15 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Exportar imagens do ImageStream para o ECR
+    - name: Exportar imagens do ImageStream para o ECR via rota pública
       shell: |
+        registry="{{ image_registry_route.stdout }}"
         for image in $(oc get is -n {{ item }} -o jsonpath='{.items[*].status.tags[*].items[*].dockerImageReference}'); do
+          external_image=$(echo "$image" | sed "s|image-registry.openshift-image-registry.svc:5000|$registry|")
           img_name=$(basename "$image")
           new_image="{{ ecr_url }}/{{ item }}/$img_name"
-          echo "Copiando $image para $new_image"
-          skopeo copy --src-tls-verify=false --dest-tls-verify=true docker://$image docker://$new_image
+          echo "Copiando $external_image para $new_image"
+          skopeo copy --src-tls-verify=false --dest-tls-verify=true docker://$external_image docker://$new_image
         done
       args:
         executable: /bin/bash
