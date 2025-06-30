@@ -7,7 +7,7 @@ log_error()  { echo "❌ [ERROR] $*"; }
 
 AWS_REGION="${AWS_REGION:?Defina AWS_REGION}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-PROJETOS_TXT="projetos.txt"
+PROJETOS_TXT="files/projects.txt"
 SA_NAME="image-uploader"
 KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
 SRC_AUTH="/tmp/podman-auth-src.json"
