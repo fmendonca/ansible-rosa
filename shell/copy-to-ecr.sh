@@ -7,13 +7,39 @@ log_warn()   { echo "⚠️  [WARN] $*"; }
 log_error()  { echo "❌ [ERROR] $*"; }
 
 # === CONFIG ===
-SRC_KUBECONFIG="${SRC_KUBECONFIG:?Defina SRC_KUBECONFIG}"
 AWS_REGION="${AWS_REGION:?Defina AWS_REGION}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:?Defina AWS_ACCOUNT_ID}"
 PROJETOS_TXT="projetos.txt"
 SA_NAME="image-uploader"
+KUBECONFIG_SRC="/tmp/kubeconfig_clustersrc"
 
-REG_SRC=$(oc --kubeconfig="$SRC_KUBECONFIG" get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+# === GERA KUBECONFIG TEMPORÁRIO ===
+log_info "Gerando kubeconfig temporário com oc whoami..."
+TOKEN=$(oc whoami --show-token)
+SERVER=$(oc whoami --show-server)
+USER=$(oc whoami)
+
+cat > "$KUBECONFIG_SRC" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: $SERVER
+  name: src-cluster
+contexts:
+- context:
+    cluster: src-cluster
+    user: $USER
+  name: src-context
+current-context: src-context
+users:
+- name: $USER
+  user:
+    token: $TOKEN
+EOF
+
+REG_SRC=$(oc --kubeconfig="$KUBECONFIG_SRC" get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
 REG_DST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
 # Projetos sistêmicos a ignorar
@@ -34,18 +60,18 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   log_info "Projeto: $projeto"
 
   log_info "Garantindo SA $SA_NAME no projeto..."
-  if ! oc --kubeconfig="$SRC_KUBECONFIG" -n "$projeto" get sa "$SA_NAME" &>/dev/null; then
-    oc --kubeconfig="$SRC_KUBECONFIG" -n "$projeto" create sa "$SA_NAME"
+  if ! oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" get sa "$SA_NAME" &>/dev/null; then
+    oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" create sa "$SA_NAME"
   fi
 
   for i in {1..5}; do
-    if oc --kubeconfig="$SRC_KUBECONFIG" -n "$projeto" get sa "$SA_NAME" &>/dev/null; then break; fi
+    if oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" get sa "$SA_NAME" &>/dev/null; then break; fi
     sleep 1
   done
 
-  oc --kubeconfig="$SRC_KUBECONFIG" -n "$projeto" policy add-role-to-user system:image-puller -z "$SA_NAME" >/dev/null || true
+  oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" policy add-role-to-user system:image-puller -z "$SA_NAME" >/dev/null || true
 
-  SRC_TOKEN=$(oc --kubeconfig="$SRC_KUBECONFIG" -n "$projeto" create token "$SA_NAME" --duration=15m || true)
+  SRC_TOKEN=$(oc --kubeconfig="$KUBECONFIG_SRC" -n "$projeto" create token "$SA_NAME" --duration=15m || true)
   SRC_AUTH="/tmp/podman-auth-src.json"
 
   if [[ -z "$SRC_TOKEN" ]]; then
@@ -59,7 +85,7 @@ while read -r projeto || [[ -n "$projeto" ]]; do
     continue
   fi
 
-  IS_JSON=$(oc --kubeconfig="$SRC_KUBECONFIG" get is -n "$projeto" -o json || true)
+  IS_JSON=$(oc --kubeconfig="$KUBECONFIG_SRC" get is -n "$projeto" -o json || true)
   if ! echo "$IS_JSON" | jq -e '.items | length > 0' >/dev/null; then
     log_warn "Nenhum ImageStream no projeto $projeto. Ignorando."
     continue
@@ -102,5 +128,5 @@ while read -r projeto || [[ -n "$projeto" ]]; do
   done
 done < "$PROJETOS_TXT"
 
-rm -f /tmp/podman-auth-src.json
+rm -f /tmp/podman-auth-src.json "$KUBECONFIG_SRC"
 log_info "Migração concluída para o ECR!"
