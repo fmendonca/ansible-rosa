@@ -1,0 +1,26 @@
+
+# Ignorar arquivos de ambiente
+env
+
+# Ignorar diretórios e arquivos do Ansible
+*.retry
+*.log
+
+# Ignorar arquivos de sistema
+.DS_Store
+
+# Ignorar pastas de cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorar credenciais e arquivos sensíveis
+*.pem
+*.key
+*.crt
+*.kubeconfig
+secrets.yml
+
+# Ignorar diretórios temporários
+tmp/

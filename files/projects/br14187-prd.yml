@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Namespace","metadata":{"annotations":{"openshift.io/description":"OutSytem BRMania","openshift.io/display-name":"br14187-prd","openshift.io/requester":"5W3X","openshift.io/sa.scc.mcs":"s0:c61,c0","openshift.io/sa.scc.supplemental-groups":"1003660000/10000","openshift.io/sa.scc.uid-range":"1003660000/10000"},"creationTimestamp":"2025-04-25T17:04:23Z","labels":{"kubernetes.io/metadata.name":"br14187-prd","pod-security.kubernetes.io/audit":"restricted","pod-security.kubernetes.io/audit-version":"v1.24","pod-security.kubernetes.io/warn":"restricted","pod-security.kubernetes.io/warn-version":"v1.24"},"name":"br14187-prd","resourceVersion":"1167683484","uid":"028d7a41-9339-4c1b-af69-fba4e651e3bc"},"spec":{"finalizers":["kubernetes"]},"status":{"phase":"Active"}}
+    openshift.io/description: OutSytem BRMania
+    openshift.io/display-name: br14187-prd
+    openshift.io/requester: 5W3X
+    openshift.io/sa.scc.mcs: s0:c61,c0
+    openshift.io/sa.scc.supplemental-groups: 1003660000/10000
+    openshift.io/sa.scc.uid-range: 1003660000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br14187-prd
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.24
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.24
+  name: br14187-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

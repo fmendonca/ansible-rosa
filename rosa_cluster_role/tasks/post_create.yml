@@ -1,0 +1,106 @@
+---
+- name: Aguardar até que o operator_role_prefix esteja disponível no cluster
+  shell: >
+    {{ bin_dir }}/rosa describe cluster -c {{ cluster_name }} --output json |
+    jq -r '.aws.sts.operator_role_prefix // empty'
+  register: operator_prefix_data
+  until: operator_prefix_data.stdout != "" and operator_prefix_data.stdout != "null"
+  retries: 30
+  delay: 20
+  changed_when: false
+
+- name: Armazenar prefixo real dos operator-roles
+  set_fact:
+    operator_prefix: "{{ operator_prefix_data.stdout }}"
+
+- name: Obter AWS Account ID
+  shell: aws sts get-caller-identity --query Account --output text --region {{ region }}
+  register: aws_account_id
+
+- name: Armazenar account_id como variável
+  set_fact:
+    account_id: "{{ aws_account_id.stdout }}"
+
+- name: Criar operator-roles ROSA após início do cluster
+  shell: >
+    {{ bin_dir }}/rosa create operator-roles
+    --hosted-cp
+    --mode auto
+    --prefix "{{ operator_prefix }}"
+    --oidc-config-id "{{ oidc_config_id }}"
+    --installer-role-arn arn:aws:iam::{{ account_id }}:role/ManagedOpenShift-HCP-ROSA-Installer-Role
+    -y
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+
+- name: Criar OIDC Provider vinculado ao cluster
+  shell: >
+    {{ bin_dir }}/rosa create oidc-provider
+    --cluster {{ cluster_name }}
+    --mode auto
+    -y
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+
+- name: Regerar política KMS completa (com CSI)
+  template:
+    src: kms-policy-full.json.j2
+    dest: "{{ kms_policy_file }}"
+  vars:
+    account_id: "{{ account_id }}"
+    rosa_cluster_name: "{{ cluster_name }}"
+    operator_prefix: "{{ operator_prefix }}"
+
+- name: Lista de roles que devem existir no IAM antes da política KMS
+  set_fact:
+    required_roles:
+      - "ManagedOpenShift-HCP-ROSA-Installer-Role"
+
+- name: Aguardar até que roles do cluster existam no IAM
+  shell: aws iam get-role --role-name {{ item }}
+  loop: "{{ required_roles }}"
+  register: role_check
+  retries: 10
+  delay: 10
+  until: role_check.results is defined and (role_check.results | selectattr('rc', 'equalto', 0) | list | length == required_roles | length)
+  changed_when: false
+  failed_when: false
+
+- name: Reaplicar política completa à chave KMS
+  shell: >
+    aws kms put-key-policy
+    --region {{ region }}
+    --key-id "{{ lookup('file', kms_arn_file) }}"
+    --policy file://{{ kms_policy_file }}
+    --policy-name default
+
+- name: Aguardar cluster atingir estado 'ready'
+  shell: >
+    {{ bin_dir }}/rosa describe cluster -c {{ cluster_name }} --output json |
+    jq -r '.status.state'
+  register: cluster_ready_check
+  until: cluster_ready_check.stdout == "ready"
+  retries: 60
+  delay: 60
+  changed_when: false
+
+- name: Pausar por 10 minutos para criar o cluster-admin
+  pause:
+    minutes: 10
+
+- name: Criar usuário admin para o cluster
+  shell: >
+    {{ bin_dir }}/rosa create admin -c {{ cluster_name }} --output json > /tmp/{{ cluster_name }}-admin.json
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+  args:
+    creates: "/tmp/{{ cluster_name }}-admin.json"
+
+- name: Armazenar senha do cluster admin
+  slurp:
+    src: "/tmp/{{ cluster_name }}-admin.json"
+  register: admin_cred_raw
+
+- name: Exibir senha admin (mascarado)
+  debug:
+    msg: "Senha admin armazenada para o cluster '{{ cluster_name }}'. Verifique o arquivo: /tmp/{{ cluster_name }}-admin.json"

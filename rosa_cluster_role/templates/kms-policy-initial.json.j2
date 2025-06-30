@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Id": "key-rosa-policy-minimal",
+  "Statement": [
+    {
+      "Sid": "Enable IAM User Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Allow HCP Installer Role to Describe KMS Key",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:role/ManagedOpenShift-HCP-ROSA-Installer-Role"
+      },
+      "Action": "kms:DescribeKey",
+      "Resource": "*"
+    }
+  ]
+}

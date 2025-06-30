@@ -1,0 +1,61 @@
+---
+- name: Instalar GitOps Operator via Kubernetes Modules
+  hosts: localhost
+  gather_facts: no
+  vars:
+    gitops_namespace: openshift-gitops
+    operator_namespace: openshift-operators
+    gitops_operator_name: openshift-gitops-operator
+    subscription_channel: stable
+    operator_source: redhat-operators
+    operator_source_namespace: openshift-marketplace
+  tasks:
+    - name: Aguardar 2 minutos
+      pause:
+        minutes: 2
+
+    - name: Carregar credenciais do usuário admin
+      slurp:
+        src: "/tmp/{{ cluster_name }}-admin.json"
+      register: admin_creds_raw
+
+    - name: Decodificar e registrar token admin
+      set_fact:
+        admin_creds: "{{ admin_creds_raw.content | b64decode | from_json }}"
+
+    - name: Login no OpenShift com oc e exportar KUBECONFIG
+      shell: >
+        {{ bin_dir }}/oc login {{ admin_creds.api_url }} \
+        --username {{ admin_creds.username }} \
+        --password {{ admin_creds.password }} \
+        --insecure-skip-tls-verify=true
+      environment:
+        KUBECONFIG: /tmp/kubeconfig
+
+    - name: Criar namespace do GitOps
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ gitops_namespace }}"
+      environment:
+        KUBECONFIG: /tmp/kubeconfig
+
+    - name: Instalar Operator OpenShift GitOps
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: Subscription
+          metadata:
+            name: "{{ gitops_operator_name }}"
+            namespace: "{{ operator_namespace }}"
+          spec:
+            channel: "{{ subscription_channel }}"
+            name: "{{ gitops_operator_name }}"
+            source: "{{ operator_source }}"
+            sourceNamespace: "{{ operator_source_namespace }}"
+      environment:
+        KUBECONFIG: /tmp/kubeconfig

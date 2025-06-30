@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    openshift.io/description: ""
+    openshift.io/display-name: ""
+    openshift.io/requester: c3h3
+    openshift.io/sa.scc.mcs: s0:c32,c29
+    openshift.io/sa.scc.supplemental-groups: 1001050000/10000
+    openshift.io/sa.scc.uid-range: 1001050000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br-cronjob-prd
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: latest
+  name: br-cronjob-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

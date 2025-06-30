@@ -1,0 +1,9 @@
+---
+- name: Criar cluster ROSA com KMS custom (2 fases)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  roles:
+    - role: rosa_cluster_role
+

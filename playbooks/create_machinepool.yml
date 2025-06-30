@@ -1,0 +1,29 @@
+---
+- name: Criar MachinePools distribuídos nas subnets privadas
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    machinepool_prefix: "prd-workers"
+    compute_machine_type: "c5.2xlarge"
+    node_count_per_subnet: "{{ (12 // private_subnets | length) | int }}"
+    node_labels:
+      environment: "prd"
+
+  tasks:
+    - name: Criar MachinePools por subnet
+      shell: >
+        {{ bin_dir }}/rosa create machinepool
+        --cluster={{ cluster_name }}
+        --name={{ machinepool_prefix }}-{{ item.1 }}
+        --replicas={{ node_count_per_subnet }}
+        --instance-type={{ compute_machine_type }}
+        --subnet={{ item.0 }}
+        {% for k, v in node_labels.items() -%}
+        --labels {{ k }}={{ v }}
+        {% endfor -%}
+        -y
+      loop: "{{ private_subnets | zip(range(private_subnets | length)) | list }}"
+      environment:
+        ROSA_TOKEN: "{{ lookup('env', 'ROSA_TOKEN') }}"

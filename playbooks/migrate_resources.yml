@@ -1,0 +1,189 @@
+---
+- name: Migrar Deployments, ConfigMaps e Secrets de cluster1 para cluster2
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cluster1_kubeconfig: "/tmp/kubeconfig_cluster1"
+    cluster2_kubeconfig: "/tmp/kubeconfig_cluster2"
+
+  tasks:
+    - name: Ler lista de projetos
+      slurp:
+        src: "{{ projects_file }}"
+      register: projects_raw
+
+    - name: Extrair projetos
+      set_fact:
+        projects: "{{ projects_raw['content'] | b64decode | regex_findall('[^\r\n]+') }}"
+
+    - name: Garantir que os projetos existem no cluster 2
+      shell: >
+        oc --kubeconfig={{ cluster2_kubeconfig }} get namespace {{ item }} ||
+        oc --kubeconfig={{ cluster2_kubeconfig }} create namespace {{ item }}
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Exportar e aplicar ConfigMaps (removendo metadata.ownerReferences)
+      shell: |
+        oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get configmap -o yaml |
+        yq '
+          del(.items[].metadata.ownerReferences) |
+          del(.items[].metadata.uid) |
+          del(.items[].metadata.resourceVersion) |
+          del(.items[].metadata.selfLink) |
+          del(.items[].metadata.creationTimestamp)
+        ' |
+        oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar Secrets (limpando metadados e excluindo tokens)
+      shell: |
+        oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get secret -o yaml |
+        yq '
+          del(.items[] | select(.type == "kubernetes.io/service-account-token")) |
+          del(.items[].metadata.ownerReferences) |
+          del(.items[].metadata.uid) |
+          del(.items[].metadata.resourceVersion) |
+          del(.items[].metadata.selfLink) |
+          del(.items[].metadata.creationTimestamp)
+        ' |
+        oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar ServiceAccounts (limpando metadados)
+      shell: |
+        sa=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get sa -o name)
+        if [ -n "$sa" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get sa -o yaml |
+          yq '
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No ServiceAccounts to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar Deployments (removendo metadados)
+      shell: |
+        deployments=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get deployment -o name)
+        if [ -n "$deployments" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get deployment -o yaml |
+          yq '
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No deployments to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar Jobs
+      shell: |
+        jobs=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get jobs.batch -o name)
+        if [ -n "$jobs" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get jobs.batch -o yaml |
+          yq '
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No jobs to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar PersistentVolumeClaims (PVCs)
+      shell: |
+        pvcs=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get pvc -o name)
+        if [ -n "$pvcs" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get pvc -o yaml |
+          yq '
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp) |
+            del(.items[].spec.volumeName)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No PVCs to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar Services
+      shell: |
+        services=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get svc -o name)
+        if [ -n "$services" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get svc -o yaml |
+          yq '
+            del(.items[] | select(.metadata.name == "kubernetes")) |
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp) |
+            del(.items[].spec.clusterIP) |
+            del(.items[].spec.clusterIPs)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No services to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true
+
+    - name: Exportar e aplicar Routes
+      shell: |
+        routes=$(oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get route -o name)
+        if [ -n "$routes" ]; then
+          oc --kubeconfig={{ cluster1_kubeconfig }} -n {{ item }} get route -o yaml |
+          yq '
+            del(.items[].metadata.ownerReferences) |
+            del(.items[].metadata.uid) |
+            del(.items[].metadata.resourceVersion) |
+            del(.items[].metadata.selfLink) |
+            del(.items[].metadata.creationTimestamp) |
+            del(.items[].status)
+          ' |
+          oc --kubeconfig={{ cluster2_kubeconfig }} -n {{ item }} apply -f -
+        else
+          echo "No routes to migrate in {{ item }}"
+        fi
+      loop: "{{ projects }}"
+      loop_control:
+        label: "{{ item }}"
+      ignore_errors: true

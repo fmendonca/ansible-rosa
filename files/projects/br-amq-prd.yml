@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    openshift.io/description: ""
+    openshift.io/display-name: ""
+    openshift.io/requester: c3h3
+    openshift.io/sa.scc.mcs: s0:c30,c10
+    openshift.io/sa.scc.supplemental-groups: 1000890000/10000
+    openshift.io/sa.scc.uid-range: 1000890000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br-amq-prd
+    olm.operatorgroup.uid/de63be66-08d8-4d97-9448-78ffd3950ec9: ""
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+  name: br-amq-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

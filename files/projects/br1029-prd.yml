@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Namespace","metadata":{"annotations":{"openshift.io/sa.scc.mcs":"s0:c59,c24","openshift.io/sa.scc.supplemental-groups":"1003470000/10000","openshift.io/sa.scc.uid-range":"1003470000/10000"},"creationTimestamp":"2024-09-23T14:16:48Z","labels":{"kubernetes.io/metadata.name":"br1029-prd","pod-security.kubernetes.io/audit":"restricted","pod-security.kubernetes.io/audit-version":"v1.24","pod-security.kubernetes.io/warn":"restricted","pod-security.kubernetes.io/warn-version":"v1.24"},"name":"br1029-prd","resourceVersion":"759487047","uid":"b186e447-8802-4815-b58c-004d44fc6a4a"},"spec":{"finalizers":["kubernetes"]},"status":{"phase":"Active"}}
+    openshift.io/sa.scc.mcs: s0:c59,c24
+    openshift.io/sa.scc.supplemental-groups: 1003470000/10000
+    openshift.io/sa.scc.uid-range: 1003470000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br1029-prd
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.24
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.24
+  name: br1029-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

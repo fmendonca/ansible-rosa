@@ -1,0 +1,3 @@
+---
+rosa_token: "{{ lookup('env', 'ROSA_TOKEN') }}"
+

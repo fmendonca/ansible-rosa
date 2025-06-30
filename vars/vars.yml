@@ -1,0 +1,21 @@
+cluster_name: dr-zlom3
+region: us-east-2
+openshift_version: "4.18.14"
+replicas: 3
+compute_machine_type: m5.xlarge
+bin_dir: "/usr/local/bin"
+kms_policy_file: /tmp/rosa-key-policy.json
+kms_arn_file: /tmp/kms_arn.txt
+oidc_config_id: 283qbs4pv05vkl9566jov5r1g4qvea4e
+projects_file: "{{ playbook_dir }}/../files/projects.txt"
+private_subnets:
+  - "subnet-0551f0e2cba100563"
+  - "subnet-085e48be2dbb92861"
+  - "subnet-011a3687c22aca91d"
+
+cluster1_api: "https://api.dr-zlom.611c.p3.openshiftapps.com:443"
+cluster2_api: "https://api.dr-zlom2.105d.p3.openshiftapps.com:443"
+cluster1_user: "{{ lookup('env', 'CLUSTER1_USER') }}"
+cluster1_password: "{{ lookup('env', 'CLUSTER1_PASSWORD') }}"
+cluster2_user: "{{ lookup('env', 'CLUSTER2_USER') }}"
+cluster2_password: "{{ lookup('env', 'CLUSTER2_PASSWORD') }}"

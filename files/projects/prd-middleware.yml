@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    openshift.io/description: ""
+    openshift.io/display-name: prd-middleware
+    openshift.io/requester: 5W3X
+    openshift.io/sa.scc.mcs: s0:c33,c27
+    openshift.io/sa.scc.supplemental-groups: 1001110000/10000
+    openshift.io/sa.scc.uid-range: 1001110000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: prd-middleware
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+  name: prd-middleware
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

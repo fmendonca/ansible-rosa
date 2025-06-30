@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Namespace","metadata":{"annotations":{"openshift.io/description":"POD Produção da aplicação Lubrax System","openshift.io/display-name":"br-lubrax-system-prd","openshift.io/requester":"G68N","openshift.io/sa.scc.mcs":"s0:c60,c0","openshift.io/sa.scc.supplemental-groups":"1003540000/10000","openshift.io/sa.scc.uid-range":"1003540000/10000"},"creationTimestamp":"2024-11-12T12:31:31Z","labels":{"kubernetes.io/metadata.name":"br-lubrax-system-prd","pod-security.kubernetes.io/audit":"restricted","pod-security.kubernetes.io/audit-version":"v1.24","pod-security.kubernetes.io/warn":"restricted","pod-security.kubernetes.io/warn-version":"v1.24"},"name":"br-lubrax-system-prd","resourceVersion":"842242452","uid":"e9eed8e2-e8d5-47ee-a3ae-67883fe52acc"},"spec":{"finalizers":["kubernetes"]},"status":{"phase":"Active"}}
+    openshift.io/description: POD Produção da aplicação Lubrax System
+    openshift.io/display-name: br-lubrax-system-prd
+    openshift.io/requester: G68N
+    openshift.io/sa.scc.mcs: s0:c60,c0
+    openshift.io/sa.scc.supplemental-groups: 1003540000/10000
+    openshift.io/sa.scc.uid-range: 1003540000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br-lubrax-system-prd
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.24
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.24
+  name: br-lubrax-system-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active

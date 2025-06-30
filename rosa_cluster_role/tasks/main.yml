@@ -1,0 +1,5 @@
+---
+- import_tasks: pre_create.yml
+- import_tasks: create_cluster.yml
+- import_tasks: post_create.yml
+

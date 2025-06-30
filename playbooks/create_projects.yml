@@ -1,0 +1,64 @@
+---
+- name: Aplicar projetos no OpenShift
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    cluster_name: dr-zlom
+    login_json: "/tmp/{{ cluster_name }}-admin.json"
+    projects_dir: "{{ playbook_dir }}/../files/projects"
+    kubeconfig_temp: "/tmp/{{ cluster_name }}-kubeconfig"
+    oc_login_cmd: >
+      oc login {{ openshift_api_url }} --username={{ openshift_user }} --password={{ openshift_pass }} --insecure-skip-tls-verify=true --kubeconfig={{ kubeconfig_temp }}
+
+  tasks:
+
+    - name: Ler credenciais do cluster
+      slurp:
+        src: "{{ login_json }}"
+      register: login_data
+
+    - name: Decodificar JSON de login
+      set_fact:
+        login_parsed: "{{ login_data.content | b64decode | from_json }}"
+
+    - name: Definir variáveis de login a partir do JSON
+      set_fact:
+        openshift_api_url: "{{ login_parsed.api_url }}"
+        openshift_user: "{{ login_parsed.username }}"
+        openshift_pass: "{{ login_parsed.password }}"
+
+    - name: Logar no OpenShift e gerar kubeconfig temporário
+      ansible.builtin.shell: "{{ oc_login_cmd }}"
+      register: login_result
+      changed_when: false
+
+    - name: Carregar lista de arquivos de projeto
+      find:
+        paths: "{{ projects_dir }}"
+        patterns: "*.yml"
+        recurse: false
+      register: arquivos_projetos
+
+    - name: Remover campos proibidos (resourceVersion, uid, etc.)
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '^\s*(resourceVersion|uid|creationTimestamp|generation|managedFields):.*$'
+        replace: ''
+      loop: "{{ arquivos_projetos.files }}"
+
+    - name: Remover blocos 'status:' inteiros (linha inicial)
+      ansible.builtin.lineinfile:
+        path: "{{ item.path }}"
+        regexp: '^status:'
+        state: absent
+      loop: "{{ arquivos_projetos.files }}"
+      ignore_errors: true
+
+    - name: Aplicar todos os projetos via kubernetes.core.k8s
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_temp }}"
+        src: "{{ item.path }}"
+      loop: "{{ arquivos_projetos.files }}"
+

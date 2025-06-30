@@ -1,0 +1,63 @@
+{
+  "Version": "2012-10-17",
+  "Id": "key-rosa-policy-1",
+  "Statement": [
+    {
+      "Sid": "Enable IAM User Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Installer Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:role/ManagedOpenShift-HCP-ROSA-Installer-Role"
+      },
+      "Action": [
+        "kms:CreateGrant",
+        "kms:DescribeKey",
+        "kms:GenerateDataKeyWithoutPlaintext"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ROSA KubeControllerManager Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:role/{{ operator_prefix }}-kube-system-kube-controller-manager"
+      },
+      "Action": "kms:DescribeKey",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ROSA KMS Provider Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:role/{{ operator_prefix }}-kube-system-kms-provider"
+      },
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ROSA NodeManager Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{ account_id }}:role/{{ operator_prefix }}-kube-system-capa-controller-manager"
+      },
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GenerateDataKeyWithoutPlaintext",
+        "kms:CreateGrant"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

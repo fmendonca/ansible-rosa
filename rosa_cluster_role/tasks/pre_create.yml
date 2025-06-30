@@ -1,0 +1,44 @@
+---
+- name: Login no ROSA CLI
+  shell: "{{ bin_dir }}/rosa login --token $ROSA_TOKEN"
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+
+- name: Criar account-roles ROSA (hosted CP)
+  shell: >
+    {{ bin_dir }}/rosa create account-roles --mode auto --hosted-cp -y
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+
+- name: Obter AWS Account ID
+  shell: aws sts get-caller-identity --query Account --output text --region {{ region }}
+  register: aws_account_id
+
+- name: Criar chave KMS
+  shell: >
+    aws kms create-key --region {{ region }}
+    --description "Custom ROSA Encryption Key"
+    --query KeyMetadata.Arn --output text
+  register: kms_arn
+
+- name: Salvar ARN da KMS
+  copy:
+    dest: "{{ kms_arn_file }}"
+    content: "{{ kms_arn.stdout }}"
+
+- name: Gerar política KMS inicial (sem CSI)
+  template:
+    src: kms-policy-initial.json.j2
+    dest: "{{ kms_policy_file }}"
+  vars:
+    account_id: "{{ aws_account_id.stdout }}"
+    rosa_cluster_name: "{{ cluster_name }}"
+
+- name: Aplicar política inicial à chave KMS
+  shell: >
+    aws kms put-key-policy
+    --region {{ region }}
+    --key-id {{ kms_arn.stdout }}
+    --policy file://{{ kms_policy_file }}
+    --policy-name default
+

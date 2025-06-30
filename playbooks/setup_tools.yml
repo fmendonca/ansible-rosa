@@ -1,0 +1,58 @@
+---
+- name: Instalar ROSA CLI, OpenShift CLI e AWS CLI
+  hosts: localhost
+  become: true
+  connection: local
+  gather_facts: no
+
+  vars:
+    bin_dir: "/usr/local/bin"
+    yq_version: "v4.43.1"
+    yq_dest: "/usr/local/bin/yq"
+
+  tasks:
+    - name: Garantir dependências do sistema
+      package:
+        name: [wget, vim, curl, tar, unzip, skopeo, buildah]
+        state: present
+
+    - name: Baixar e instalar ROSA CLI
+      shell: |
+        curl -sSL https://mirror.openshift.com/pub/openshift-v4/clients/rosa/latest/rosa-linux.tar.gz -o /tmp/rosa.tar.gz
+        tar -xzf /tmp/rosa.tar.gz -C /tmp
+        install -m 755 /tmp/rosa {{ bin_dir }}/rosa
+      args:
+        creates: "{{ bin_dir }}/rosa"
+
+    - name: Baixar e instalar OpenShift CLI (oc + kubectl)
+      shell: |
+        curl -sSL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz -o /tmp/oc.tar.gz
+        tar -xzf /tmp/oc.tar.gz -C /tmp
+        install -m 755 /tmp/oc {{ bin_dir }}/oc
+        install -m 755 /tmp/kubectl {{ bin_dir }}/kubectl
+      args:
+        creates: "{{ bin_dir }}/oc"
+
+    - name: Baixar e instalar AWS CLI v2
+      shell: |
+        curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+        unzip -q -o /tmp/awscliv2.zip -d /tmp
+        /tmp/aws/install --bin-dir {{ bin_dir }} --install-dir /opt/aws-cli --update
+      args:
+        creates: "{{ bin_dir }}/aws"
+
+    - name: Baixar yq binário
+      get_url:
+        url: "https://github.com/mikefarah/yq/releases/download/{{ yq_version }}/yq_linux_amd64"
+        dest: "{{ yq_dest }}"
+        mode: '0755'
+
+    - name: Verificar versão instalada
+      command: "{{ yq_dest }} --version"
+      register: yq_output
+      changed_when: false
+
+    - name: Exibir versão instalada
+      debug:
+        msg: "{{ yq_output.stdout }}"
+

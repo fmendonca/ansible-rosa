@@ -1,0 +1,34 @@
+---
+- name: Carregar ARN do KMS
+  slurp:
+    src: "{{ kms_arn_file }}"
+  register: kms_data
+
+- name: Decodificar ARN da KMS
+  set_fact:
+    kms_custom_arn: "{{ kms_data.content | b64decode }}"
+
+- name: Obter AWS Account ID novamente para uso nos ARNs
+  shell: aws sts get-caller-identity --query Account --output text --region {{ region }}
+  register: aws_account_id
+
+- name: Iniciar criação do cluster ROSA em segundo plano
+  shell: >
+    nohup {{ bin_dir }}/rosa create cluster
+    --cluster-name "{{ cluster_name }}"
+    --region "{{ region }}"
+    --version "{{ openshift_version }}"
+    --replicas "{{ replicas }}"
+    --compute-machine-type "{{ compute_machine_type }}"
+    --subnet-ids "{{ private_subnets | join(',') }}"
+    --hosted-cp
+    --private
+    --oidc-config-id "{{ oidc_config_id }}"
+    --kms-key-arn "{{ kms_custom_arn }}"
+    --watch > /tmp/cluster-create.log 2>&1 &
+  environment:
+    ROSA_TOKEN: "{{ rosa_token }}"
+
+- name: Pausar por 45 segundos
+  pause:
+    seconds: 45

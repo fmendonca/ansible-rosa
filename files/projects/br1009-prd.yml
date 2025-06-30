@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  annotations:
+    openshift.io/description: ""
+    openshift.io/display-name: ""
+    openshift.io/requester: c0yx
+    openshift.io/sa.scc.mcs: s0:c56,c40
+    openshift.io/sa.scc.supplemental-groups: 1003160000/10000
+    openshift.io/sa.scc.uid-range: 1003160000/10000
+
+  labels:
+    dynakube.internal.dynatrace.com/instance: zlon
+    kubernetes.io/metadata.name: br1009-prd
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.24
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.24
+  name: br1009-prd
+
+
+spec:
+  finalizers:
+  - kubernetes
+  phase: Active
