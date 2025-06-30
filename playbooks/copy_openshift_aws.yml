@@ -49,7 +49,7 @@
 
     - name: Ler projetos do arquivo
       slurp:
-        src: ../files/projects.txt
+        src: files/projects.txt
       register: projects_file
 
     - name: Extrair lista de projetos
@@ -76,6 +76,11 @@
       register: ecr_token
       changed_when: false
 
+    - name: Login no ECR com podman
+      shell: |
+        echo "{{ ecr_token.stdout }}" | podman login --username AWS --password-stdin {{ ecr_url }}
+      changed_when: false
+
     - name: Criar Secret para acesso ao ECR no OpenShift
       shell: |
         oc create secret docker-registry {{ ecr_secret_name }} \
@@ -100,7 +105,7 @@
         state: directory
       loop: "{{ projects }}"
 
-    - name: Exportar imagens do ImageStream para o ECR via rota pública com auth
+    - name: Exportar imagens do ImageStream para o ECR via podman
       shell: |
         registry="{{ image_registry_route.stdout }}"
         for image in $(oc get is -n {{ item }} -o json | jq -r '.items[].status.tags[].items[].dockerImageReference'); do
@@ -112,12 +117,10 @@
           img_name=$(basename "$image")
           new_image="{{ ecr_url }}/{{ item }}/$img_name"
           echo "Copiando $external_image para $new_image"
-          skopeo copy \
-            --src-authfile /tmp/authfile-openshift.json \
-            --src-tls-verify=false \
-            --dest-tls-verify=true \
-            docker://$external_image \
-            docker://$new_image
+
+          podman pull --tls-verify=false --authfile /tmp/authfile-openshift.json docker://$external_image || exit 1
+          podman tag $external_image $new_image
+          podman push --tls-verify=true $new_image || exit 1
         done
       args:
         executable: /bin/bash
