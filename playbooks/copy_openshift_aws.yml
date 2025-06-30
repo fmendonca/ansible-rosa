@@ -101,15 +101,16 @@
       shell: |
         export TOKEN=$(oc whoami -t)
         cat > /tmp/authfile-openshift.json <<EOF
-        {
-          "auths": {
-            "{{ image_registry_route.stdout }}": {
-              "auth": "$(echo -n "unused:\$TOKEN" | base64)"
-            }
-          }
-        }
-        EOF
-      executable: /bin/bash
+{
+  "auths": {
+    "{{ image_registry_route.stdout }}": {
+      "auth": "$(echo -n "unused:$TOKEN" | base64)"
+    }
+  }
+}
+EOF
+      args:
+        executable: /bin/bash
 
     - name: Espelhar imagens usando podman
       shell: |
